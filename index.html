@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TOI Rate Calculator</title>
+    <style>
+        :root { --toi-red: #ed1c24; --toi-dark: #222; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: #f0f2f5; padding: 15px; margin: 0; display: flex; justify-content: center; }
+        .card { background: white; width: 100%; max-width: 400px; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-top: 6px solid var(--toi-red); box-sizing: border-box; }
+        .status { font-size: 11px; font-weight: bold; text-align: center; margin-bottom: 15px; padding: 8px; border-radius: 6px; text-transform: uppercase; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; color: #444; }
+        input, select { width: 100%; padding: 14px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; background: #fff; box-sizing: border-box; -webkit-appearance: none; }
+        .result { background: var(--toi-dark); color: white; padding: 25px; border-radius: 12px; text-align: center; margin-top: 20px; }
+        .res-val { font-size: 34px; font-weight: 800; display: block; margin-top: 5px; color: #fff; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div id="syncStatus" class="status" style="background: #eee; color: #666;">LOADING...</div>
+    
+    <div class="form-group">
+        <label>Vertical</label>
+        <input list="v-list" id="vInput" placeholder="Select Vertical">
+        <datalist id="v-list">
+            <option value="REAL ESTATE"><option value="RETAIL"><option value="EDUCATION">
+            <option value="AUTOMOBILES"><option value="BFSI"><option value="GOVERNMENT">
+        </datalist>
+    </div>
+
+    <div class="form-group">
+        <label>Business Unit (BU)</label>
+        <input list="bus" id="buInput" placeholder="Search BU..." oninput="calculate()">
+        <datalist id="bus"></datalist>
+    </div>
+
+    <div class="form-group">
+        <label>Page Position</label>
+        <select id="page" onchange="updateSizes()">
+            <option value="FRONT PAGE">FRONT PAGE</option>
+            <option value="PAGE 3">PAGE 3</option>
+            <option value="PAGE 5">PAGE 5</option>
+            <option value="RD">RD</option>
+            <option value="SP">SP</option>
+            <option value="HYBRID J1">HYBRID J1</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Size</label>
+        <select id="size" onchange="calculate()"></select>
+    </div>
+
+    <div class="result">
+        <span style="font-size: 12px; opacity: 0.7; letter-spacing: 1px;">TOTAL RATE</span>
+        <span id="rateDisplay" class="res-val">₹ 0</span>
+    </div>
+</div>
+
+<script>
+    // Link provided
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTv8KLOv1gr5gr-yMNWcIat8C-wn_Scez6ybQNSCf1xItsIzayTZ2Os6ozVfDV3ddmILOarN7qLGtc6/pub?output=csv';
+
+    // Built-in Backup Rates
+    let rates = { 
+        "TOIM": 50, "TOID + TOI": 30, "TOINOI": 4, "TOIDGR": 4.5, "TOIBG": 30,
+        "TOIPU": 12, "TOICH": 12, "TOIH": 9, "TOIK": 10, "TOIA": 7, "TOIL": 4
+    };
+
+    const sizeMap = {
+        "FRONT PAGE": ["823", "400", "240"],
+        "PAGE 3": ["1727", "823", "400", "240"],
+        "PAGE 5": ["1727", "823", "400", "240"],
+        "RD": ["1727", "823", "400", "240"],
+        "SP": ["1727", "823", "400", "240"],
+        "HYBRID J1": ["1727"]
+    };
+
+    // STEP 1: Immediate Setup (No internet needed)
+    function startCalculator() {
+        const buList = document.getElementById('bus');
+        buList.innerHTML = '';
+        Object.keys(rates).sort().forEach(name => {
+            let opt = document.createElement('option');
+            opt.value = name;
+            buList.appendChild(opt);
+        });
+        updateSizes();
+        document.getElementById('syncStatus').innerText = "● OFFLINE READY";
+    }
+
+    function updateSizes() {
+        const page = document.getElementById('page').value;
+        const sizeSelect = document.getElementById('size');
+        const sizes = sizeMap[page] || [];
+        sizeSelect.innerHTML = '';
+        sizes.forEach(s => {
+            let opt = document.createElement('option');
+            opt.value = s;
+            opt.text = s;
+            sizeSelect.appendChild(opt);
+        });
+        calculate();
+    }
+
+    // STEP 2: Background Sync (Try to get live data)
+    async function syncLive() {
+        const status = document.getElementById('syncStatus');
+        try {
+            const response = await fetch(CSV_URL + '&cb=' + Date.now());
+            if (!response.ok) return; // Exit silently if blocked
+            
+            const text = await response.text();
+            const rows = text.split('\n');
+            
+            rows.forEach((row) => {
+                const parts = row.replace(/"/g, '').split(',');
+                if (parts.length >= 2) {
+                    const name = parts[0].trim();
+                    const val = parseFloat(parts[1]);
+                    if (name && !isNaN(val)) rates[name] = val;
+                }
+            });
+            
+            status.innerText = "● LIVE SYNC ACTIVE";
+            status.style.background = "#d4edda";
+            status.style.color = "#155724";
+            startCalculator(); // Refresh the list with live values
+        } catch (e) {
+            console.log("Sync skipped.");
+        }
+    }
+
+    function calculate() {
+        const bu = document.getElementById('buInput').value;
+        const page = document.getElementById('page').value;
+        const size = document.getElementById('size').value;
+        const val = rates[bu] || 0;
+        
+        let res = (val * 0.55 * 100000);
+        if (page === "FRONT PAGE") {
+            if (size === "823") res = res / 823;
+            else if (size === "400") res = (res * 0.6) / 400;
+            else res = (res * 0.6 * 0.7) / 240;
+        } else if (page === "HYBRID J1") {
+            res = (val * 0.85 * 100000) / 1727;
+        } else {
+            res = res / 1727;
+        }
+        document.getElementById('rateDisplay').innerText = "₹ " + Math.round(res).toLocaleString('en-IN');
+    }
+
+    // CRITICAL: Initialize UI first, sync second
+    window.addEventListener('DOMContentLoaded', () => {
+        startCalculator();
+        syncLive();
+    });
+</script>
+</body>
+</html>
